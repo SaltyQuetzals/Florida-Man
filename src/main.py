@@ -1,31 +1,31 @@
 import os
 import random
 import re
-from typing import List
+from typing import List, Tuple
 
 import markovify
 import nltk
 import pandas as pd
 
+MAX_OVERLAP = 0.4
+MIN_CHARS = 30
+MAX_CHARS = 100
 
-class POSifiedText(markovify.NewlineText):
-    def word_split(self, sentence):
-        words = nltk.word_tokenize(sentence)
-        words = [ "::".join(tag) for tag in nltk.pos_tag(words) ]
-        return words
 
-    def word_join(self, words):
-        sentence = " ".join(word.split("::")[0] for word in words)
-        return sentence
-
-def format_real_headlines(df: pd.DataFrame) -> List[str]:
+def format_real_headlines(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
     assert "title" in df
+    assert "url" in df
 
-    headlines = df["title"].tolist()
-    for i in range(len(headlines)):
-        headlines[i] = headlines[i].title()
-
-    return headlines
+    headlines_and_urls = df[["title", "url"]].values.tolist()
+    formatted_headlines = []
+    urls = []
+    for headline, url in headlines_and_urls:
+        headline = headline.replace("&amp;", "&")
+        headline = headline.replace("Floridaman", "Florida man")
+        headline = headline.title()
+        formatted_headlines.append(headline)
+        urls.append(url)
+    return formatted_headlines, urls
 
 
 def print_intro():
@@ -53,10 +53,15 @@ def input_choices(input_str: str, choices: List[str]) -> str:
 
 
 def main():
+    print("Loading headline data...", end="")
     real_headlines_df = pd.read_csv("data/real_reddit_posts.csv")
-    real_headlines = format_real_headlines(real_headlines_df)
-    model = POSifiedText("\n".join(real_headlines))
+    real_headlines, real_urls = format_real_headlines(real_headlines_df)
+    print("done.")
+    print("Training model...", end="")
+    model = markovify.NewlineText("\n".join(real_headlines), state_size=1)
+    print("done.")
 
+    os.system("clear")
     print_intro()
 
     print("To exit the game, please enter 'quit' at any time.")
@@ -67,37 +72,33 @@ def main():
 
     user_input = None
 
-    num_questions = 0
-    right_answers = 0
     while user_input != "quit":
-        real = random.choice(real_headlines)
-        fake = model.make_sentence(max_overlap_ratio=0.5, tries=100_000, max_words=15)
+        r_line, r_url = random.choice(list(zip(real_headlines, real_urls)))
+        f_line = model.make_short_sentence(
+            MAX_CHARS, min_chars=MIN_CHARS, max_overlap_ratio=MAX_OVERLAP
+        )
+        while f_line is None:
+            f_line = model.make_short_sentence(
+                MAX_CHARS, min_chars=MIN_CHARS, max_overlap_ratio=MAX_OVERLAP
+            )
+        print("Is the following headline REAL or FAKE?\n\n")
 
-        possible_headlines = [real, fake]
-
-        displayed = random.choice(possible_headlines)
-
-        if num_questions != 0:
-            print(f"Your current accuracy is: {right_answers / num_questions * 100}%")
-        print("Is the following headline real or fake?")
-        print("\n")
-        print(displayed)
-        print("\n")
-        choice = input_choices(prompt_str, choices)
+        displayed_line = random.choice([r_line, f_line])
+        print(displayed_line, end="\n\n")
+        user_input = input_choices(prompt_str, choices)
         os.system("clear")
 
-        if choice == "quit":
+        if user_input == "quit":
             break
-        elif choice == "real" and displayed == real:
-            print("Correct! It was a real headline.")
-            right_answers += 1
-        elif choice == "fake" and displayed == fake:
-            print("Correct! It was a fake headline.")
-            right_answers += 1
+        elif user_input == "real" and displayed_line == r_line:
+            print(f"Correct! The headline was real. Check it out here: {r_url}")
+        elif user_input == "fake" and displayed_line == f_line:
+            print("Correct! The headline was fake.")
         else:
-            actual_type = "real" if displayed == real else "fake"
-            print(f"Sorry, the headline was actually {actual_type}")
-        num_questions += 1
+            actual_type = "real" if displayed_line == r_line else "fake"
+            print(f"Incorrect! The headline was actually {actual_type}")
+            if actual_type == "real":
+                print(f"Don't believe me? Check it out here: {r_url}")
 
 
 if __name__ == "__main__":

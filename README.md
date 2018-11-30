@@ -14,16 +14,7 @@ python main.py
 ## Data Source
 
 The datasource for the Markov Chains was a giant Reddit datadump on Google
-BigQuery. The exact query I used was:
-
-```sql
-SELECT
-  title
-FROM
-  `fh-bigquery.reddit_posts.full_corpus_201512`
-WHERE
-  subreddit = 'FloridaMan'
-```
+BigQuery. The exact query I used can be found in the `query.sql` file.
 
 Since the dataset's pretty small, the data can be found in
 `src/data/real_reddit_posts.csv`.
